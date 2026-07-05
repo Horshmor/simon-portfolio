@@ -15,7 +15,7 @@
     <img class="logo-mark" src="assets/logo-mark.svg" alt="">
   </a>
 
-  <a class="works-link" href="#works">works</a>
+  <button class="corner-link" type="button" aria-expanded="false">about</button>
 
   <div class="sidebar-blocks">
     <p>simon<br>tsereteli</p>
@@ -92,6 +92,15 @@
   </article>
 
 </main>
+
+<script>
+  const link = document.querySelector('.corner-link');
+  link.addEventListener('click', () => {
+    const open = document.body.classList.toggle('about-open');
+    link.textContent = open ? 'works' : 'about';
+    link.setAttribute('aria-expanded', open);
+  });
+</script>
 
 </body>
 </html>

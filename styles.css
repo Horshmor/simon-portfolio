@@ -60,7 +60,15 @@ a:hover { text-decoration: underline; }
   flex: none;
 }
 
-.works-link { display: none; }
+.corner-link {
+  display: none;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
 
 .sidebar-blocks {
   margin-top: 24px;
@@ -117,15 +125,31 @@ a:hover { text-decoration: underline; }
     width: auto;
   }
 
-  .works-link {
+  .corner-link {
     display: block;
-    position: absolute;
+    position: fixed;
     top: 41px;
     right: var(--page-pad);
     line-height: 1;
+    z-index: 20;
   }
 
-  .sidebar-blocks { margin-top: 33px; }
+  .sidebar-blocks { display: none; }
+
+  /* "about" popover: full-screen info panel over the works grid */
+  .about-open .sidebar {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: #fff;
+    padding: var(--page-pad);
+    overflow-y: auto;
+  }
+  .about-open .sidebar-blocks {
+    display: block;
+    margin-top: 33px;
+  }
+  .about-open { overflow: hidden; }
 
   .grid {
     margin-left: 0;
