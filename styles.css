@@ -1,3 +1,10 @@
+@font-face {
+  font-family: "Innovator Grotesk VF";
+  src: url("assets/InnovatorGroteskVF-VF.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   --blue: #130CF2;
   --page-pad: 24px;
@@ -77,7 +84,7 @@ a:hover { text-decoration: underline; }
 }
 
 .card-img {
-  height: 380px;
+  aspect-ratio: 608 / 380;
   overflow: hidden;
 }
 .card-img img {
@@ -126,6 +133,5 @@ a:hover { text-decoration: underline; }
     grid-template-columns: 1fr;
   }
 
-  .card-img { height: 240px; }
   .card p { max-width: none; }
 }
