@@ -13,6 +13,13 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+html::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar { display: none; }
+
 body {
   background: #fff;
   color: var(--blue);
@@ -28,10 +35,30 @@ a:hover { text-decoration: underline; }
 /* ---------- sidebar ---------- */
 
 .sidebar {
-  position: fixed;
+  position: absolute;
   top: var(--page-pad);
   left: var(--page-pad);
   width: var(--sidebar-w);
+}
+
+/* pin contacts to the bottom edge when the viewport is tall enough;
+   otherwise the sidebar scrolls with the page and contacts stay in flow */
+@media (min-width: 801px) and (min-height: 840px) {
+  .sidebar {
+    position: fixed;
+    bottom: var(--page-pad);
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-blocks {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-blocks .contacts {
+    margin-top: auto;
+    padding-top: 30px;
+  }
 }
 
 .logo {
@@ -144,10 +171,19 @@ a:hover { text-decoration: underline; }
     background: #fff;
     padding: var(--page-pad);
     overflow-y: auto;
+    scrollbar-width: none;
+    display: flex;
+    flex-direction: column;
   }
   .about-open .sidebar-blocks {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
     margin-top: 33px;
+  }
+  .about-open .sidebar-blocks .contacts {
+    margin-top: auto;
+    padding-top: 30px;
   }
   .about-open { overflow: hidden; }
 
