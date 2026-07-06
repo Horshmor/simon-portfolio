@@ -32,7 +32,14 @@
 <main class="grid" id="works">
 
   <article class="card">
-    <div class="card-img"><img src="assets/chronos.jpg" alt="Chronos" loading="lazy"></div>
+    <div class="card-img">
+      <div class="slides">
+        <img src="assets/chronos.jpg" alt="Chronos" loading="lazy">
+        <img src="assets/chronos-1.png" alt="Chronos" loading="lazy">
+        <img src="assets/chronos-2.png" alt="Chronos" loading="lazy">
+        <img src="assets/chronos-3.png" alt="Chronos" loading="lazy">
+      </div>
+    </div>
     <header><h2>Chronos</h2><span>2019-2026</span></header>
     <p>Led design of a professional astrology platform from initial concept through a fully realized two-sided B2B/B2C ecosystem, growing into a leadership role over a team of four designers.</p>
   </article>
@@ -99,6 +106,40 @@
     const open = document.body.classList.toggle('about-open');
     link.textContent = open ? 'works' : 'about';
     link.setAttribute('aria-expanded', open);
+  });
+
+  // Hover-scrub slideshow: moving left→right across the image steps through slides.
+  document.querySelectorAll('.card-img').forEach((box) => {
+    const slides = box.querySelector('.slides');
+    if (!slides) return;
+    const imgs = slides.children;
+    const count = imgs.length;
+    if (count < 2) return;
+
+    // build pagination bar
+    const dots = document.createElement('div');
+    dots.className = 'pagination';
+    for (let i = 0; i < count; i++) {
+      const d = document.createElement('span');
+      dots.appendChild(d);
+    }
+    box.appendChild(dots);
+
+    let current = 0;
+    const show = (i) => {
+      if (i === current) return;
+      current = i;
+      slides.style.transform = `translateX(-${i * 100}%)`;
+      for (let k = 0; k < count; k++) dots.children[k].classList.toggle('on', k === i);
+    };
+    show(0);
+
+    box.addEventListener('pointermove', (e) => {
+      const { left, width } = box.getBoundingClientRect();
+      const ratio = Math.min(0.999, Math.max(0, (e.clientX - left) / width));
+      show(Math.floor(ratio * count));
+    });
+    box.addEventListener('pointerleave', () => show(0));
   });
 </script>
 
