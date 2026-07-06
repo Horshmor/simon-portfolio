@@ -136,14 +136,17 @@
   };
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // reveal only plays once the image is actually on screen: cards below the
-  // fold (and slides scrubbed into view later) stay blue until they appear
-  const onVisible = new WeakMap();
+  // the reveal plays whenever the image comes on screen: it re-arms (back to
+  // blue) each time the card fully leaves the viewport, and replays on return
+  const handlers = new WeakMap();
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
-      if (e.isIntersecting) { io.unobserve(e.target); const f = onVisible.get(e.target); if (f) f(); }
+      const h = handlers.get(e.target);
+      if (!h) continue;
+      if (e.isIntersecting && e.intersectionRatio >= 0.15) h.enter();
+      else if (!e.isIntersecting) h.exit();
     }
-  }, { threshold: 0.15 });
+  }, { threshold: [0, 0.15] });
 
   document.querySelectorAll('.card-img img').forEach((img) => {
     // in sliders only the first slide gets the effect; the rest are preloaded
@@ -160,12 +163,14 @@
     const r = wrap.getBoundingClientRect();
     const cols = cv.width = Math.max(1, Math.round(r.width / CELL));
     const rows = cv.height = Math.max(1, Math.round(r.height / CELL));
-    ctx.fillStyle = BLUE;
-    ctx.fillRect(0, 0, cols, rows);
+    const paintBlue = () => { ctx.fillStyle = BLUE; ctx.fillRect(0, 0, cols, rows); };
+    paintBlue();
+    let raf = 0, playing = false;
 
     const reveal = () => {
       wrap.classList.add('loaded');
-      if (reduceMotion) { cv.remove(); return; }
+      if (reduceMotion) { ctx.clearRect(0, 0, cols, rows); return; }
+      playing = true;
       // cloudy threshold field: two octaves of smooth noise + bayer grain,
       // normalized to 0..1 so the reveal always spans the full duration
       const n1 = makeNoise(cols, rows, 9), n2 = makeNoise(cols, rows, 3.5);
@@ -191,16 +196,28 @@
             if ((field[y * cols + x] - lo) / span > p) ctx.fillRect(x, y, 1, 1);
           }
         }
-        if (t < 1) requestAnimationFrame(step); else cv.remove();
+        if (t < 1) raf = requestAnimationFrame(step);
+        else { ctx.clearRect(0, 0, cols, rows); playing = false; }
       };
-      requestAnimationFrame(step);
+      raf = requestAnimationFrame(step);
     };
 
-    // play once both the file has loaded and the image is on screen
-    let loaded = img.complete && !!img.naturalWidth, visible = false, played = false;
-    const tryReveal = () => { if (loaded && visible && !played) { played = true; reveal(); } };
+    // play whenever the file has loaded and the image comes on screen; leaving
+    // the viewport re-arms it (sliders replay only their first appearance)
+    const replayable = !img.closest('.slides');
+    let loaded = img.complete && !!img.naturalWidth, inView = false, armed = true;
+    const tryReveal = () => { if (loaded && inView && armed) { armed = false; reveal(); } };
     if (!loaded) img.addEventListener('load', () => { loaded = true; tryReveal(); }, { once: true });
-    onVisible.set(wrap, () => { visible = true; tryReveal(); });
+    handlers.set(wrap, {
+      enter() { inView = true; tryReveal(); },
+      exit() {
+        inView = false;
+        if (!replayable || armed) return;
+        if (playing) { cancelAnimationFrame(raf); playing = false; }
+        paintBlue();
+        armed = true;
+      },
+    });
     io.observe(wrap);
   });
 
