@@ -2,7 +2,7 @@
   font-family: "Innovator Grotesk VF";
   src: url("assets/InnovatorGroteskVF-VF.woff2") format("woff2-variations");
   font-weight: 100 900;
-  font-display: swap;
+  font-display: block;
 }
 
 :root {
