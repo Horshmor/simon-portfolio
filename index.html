@@ -136,6 +136,15 @@
   };
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // reveal only plays once the image is actually on screen: cards below the
+  // fold (and slides scrubbed into view later) stay blue until they appear
+  const onVisible = new WeakMap();
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) { io.unobserve(e.target); const f = onVisible.get(e.target); if (f) f(); }
+    }
+  }, { threshold: 0.15 });
+
   document.querySelectorAll('.card-img img').forEach((img) => {
     const wrap = document.createElement('div');
     wrap.className = 'reveal';
@@ -184,8 +193,12 @@
       requestAnimationFrame(step);
     };
 
-    if (img.complete && img.naturalWidth) reveal();
-    else img.addEventListener('load', reveal, { once: true });
+    // play once both the file has loaded and the image is on screen
+    let loaded = img.complete && !!img.naturalWidth, visible = false, played = false;
+    const tryReveal = () => { if (loaded && visible && !played) { played = true; reveal(); } };
+    if (!loaded) img.addEventListener('load', () => { loaded = true; tryReveal(); }, { once: true });
+    onVisible.set(wrap, () => { visible = true; tryReveal(); });
+    io.observe(wrap);
   });
 
   // Hover-scrub slideshow: moving left→right across the image steps through slides.
