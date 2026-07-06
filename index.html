@@ -155,13 +155,20 @@
       wrap.classList.add('loaded');
       if (reduceMotion) { cv.remove(); return; }
       // cloudy threshold field: two octaves of smooth noise + bayer grain,
-      // normalized to 0..1 so the reveal always spans the full duration
+      // normalized to 0..1 so the reveal always spans the full duration.
+      // a third noise picks a chunk size per region (1, 2 or 4 cells): cells in
+      // a chunk share one threshold, so some areas dissolve as fine grain and
+      // others as big blocks
       const n1 = makeNoise(cols, rows, 9), n2 = makeNoise(cols, rows, 3.5);
+      const sizeNoise = makeNoise(cols, rows, 12);
       const field = new Float32Array(cols * rows);
       let lo = Infinity, hi = -Infinity;
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
-          const v = n1(x, y) * 0.62 + n2(x, y) * 0.20 + (BAYER[y & 7][x & 7] / 64) * 0.18;
+          const sn = sizeNoise(x, y);
+          const s = sn < 0.40 ? 1 : sn < 0.60 ? 2 : 4;
+          const bx = Math.floor(x / s) * s, by = Math.floor(y / s) * s;
+          const v = n1(bx, by) * 0.62 + n2(bx, by) * 0.20 + (BAYER[by & 7][bx & 7] / 64) * 0.18;
           field[y * cols + x] = v;
           if (v < lo) lo = v;
           if (v > hi) hi = v;
