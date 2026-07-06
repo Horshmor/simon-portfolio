@@ -35,9 +35,9 @@
   <article class="card">
     <div class="card-img">
       <div class="slides">
-        <img src="assets/chronos-1.png" alt="Chronos" loading="lazy">
-        <img src="assets/chronos-2.png" alt="Chronos" loading="lazy">
-        <img src="assets/chronos-3.png" alt="Chronos" loading="lazy">
+        <img src="assets/chronos-1.png" alt="Chronos">
+        <img src="assets/chronos-2.png" alt="Chronos">
+        <img src="assets/chronos-3.png" alt="Chronos">
       </div>
     </div>
     <header><h2>Chronos</h2><span>2019-2026</span></header>
@@ -146,6 +146,9 @@
   }, { threshold: 0.15 });
 
   document.querySelectorAll('.card-img img').forEach((img) => {
+    // in sliders only the first slide gets the effect; the rest are preloaded
+    // eagerly and swap in plain when scrubbed
+    if (img.parentElement.classList.contains('slides') && img !== img.parentElement.firstElementChild) return;
     const wrap = document.createElement('div');
     wrap.className = 'reveal';
     img.replaceWith(wrap);
