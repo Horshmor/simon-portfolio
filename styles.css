@@ -141,12 +141,11 @@ a:hover { text-decoration: underline; }
   width: 100%;
 }
 
-/* pagination — visible only while hovering the image */
+/* pagination — round dots, top-left; visible only while hovering the image */
 .pagination {
   position: absolute;
   left: 12px;
-  right: 12px;
-  bottom: 12px;
+  top: 12px;
   display: flex;
   gap: 6px;
   opacity: 0;
@@ -155,12 +154,13 @@ a:hover { text-decoration: underline; }
 }
 .card-img:hover .pagination { opacity: 1; }
 .pagination span {
-  flex: 1;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.45);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #C4C4C4;
   transition: background 0.2s ease;
 }
-.pagination span.on { background: #fff; }
+.pagination span.on { background: var(--blue); }
 
 .card header {
   display: flex;
