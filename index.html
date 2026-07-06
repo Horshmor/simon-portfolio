@@ -203,22 +203,24 @@
     };
 
     // play whenever the file has loaded and the image comes on screen; leaving
-    // the viewport re-arms it (sliders replay only their first appearance)
-    const replayable = !img.closest('.slides');
+    // the viewport re-arms it. For slider slides we track the card box instead
+    // of the slide itself, so scrubbing between slides never re-triggers it —
+    // only actually scrolling the card out of view does.
+    const target = img.closest('.slides') ? img.closest('.card-img') : wrap;
     let loaded = img.complete && !!img.naturalWidth, inView = false, armed = true;
     const tryReveal = () => { if (loaded && inView && armed) { armed = false; reveal(); } };
     if (!loaded) img.addEventListener('load', () => { loaded = true; tryReveal(); }, { once: true });
-    handlers.set(wrap, {
+    handlers.set(target, {
       enter() { inView = true; tryReveal(); },
       exit() {
         inView = false;
-        if (!replayable || armed) return;
+        if (armed) return;
         if (playing) { cancelAnimationFrame(raf); playing = false; }
         paintBlue();
         armed = true;
       },
     });
-    io.observe(wrap);
+    io.observe(target);
   });
 
   // Hover-scrub slideshow: moving left→right across the image steps through slides.
