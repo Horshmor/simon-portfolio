@@ -108,17 +108,11 @@
     link.setAttribute('aria-expanded', open);
   });
 
-  // Dither preloader: each image starts as a blue rectangle; once loaded, the blue
-  // erodes into the image with an 8x8 Bayer dither driven by a random gradient.
+  // VHS preloader: each image starts as a blue rectangle; once loaded, the image
+  // assembles out of the blue in flickering horizontal tear-bands — jittered
+  // offsets, ghost copies and scanlines that settle as the signal locks in.
   const BLUE = '#130CF2';
-  const BAYER = [
-    [0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26],
-    [12, 44, 4, 36, 14, 46, 6, 38], [60, 28, 52, 20, 62, 30, 54, 22],
-    [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25],
-    [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21],
-  ];
-  const CELL = 10;        // css px per dither cell
-  const DURATION = 600;   // ms
+  const DURATION = 700;   // ms
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   document.querySelectorAll('.card-img img').forEach((img) => {
@@ -131,32 +125,54 @@
     wrap.appendChild(cv);
     const ctx = cv.getContext('2d');
     const r = wrap.getBoundingClientRect();
-    const cols = cv.width = Math.max(1, Math.round(r.width / CELL));
-    const rows = cv.height = Math.max(1, Math.round(r.height / CELL));
+    const W = cv.width = Math.max(2, Math.round(r.width / 2));
+    const H = cv.height = Math.max(2, Math.round(r.height / 2));
     ctx.fillStyle = BLUE;
-    ctx.fillRect(0, 0, cols, rows);
+    ctx.fillRect(0, 0, W, H);
 
     const reveal = () => {
-      wrap.classList.add('loaded');
-      if (reduceMotion) { cv.remove(); return; }
-      // random gradient direction, normalized so projection spans 0..1
-      const ang = Math.random() * Math.PI * 2;
-      const dx = Math.cos(ang), dy = Math.sin(ang);
-      const corners = [0, dx * (cols - 1), dy * (rows - 1), dx * (cols - 1) + dy * (rows - 1)];
-      const min = Math.min(...corners), span = Math.max(...corners) - min || 1;
+      if (reduceMotion) { wrap.classList.add('loaded'); cv.remove(); return; }
+      // source crop that matches the css object-fit: cover
+      const ia = img.naturalWidth / img.naturalHeight, ca = W / H;
+      let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
+      if (ia > ca) { sw = sh * ca; sx = (img.naturalWidth - sw) / 2; }
+      else { sh = sw / ca; sy = (img.naturalHeight - sh) / 2; }
+
       const t0 = performance.now();
       const step = (now) => {
         const t = Math.min(1, (now - t0) / DURATION);
         const p = t * t * (3 - 2 * t); // smoothstep
-        ctx.clearRect(0, 0, cols, rows);
+        const q = 1 - p;               // glitch amount, decays to 0
         ctx.fillStyle = BLUE;
-        for (let y = 0; y < rows; y++) {
-          for (let x = 0; x < cols; x++) {
-            const g = (x * dx + y * dy - min) / span;
-            if (g * 0.72 + (BAYER[y & 7][x & 7] / 64) * 0.28 > p) ctx.fillRect(x, y, 1, 1);
+        ctx.fillRect(0, 0, W, H);
+        // horizontal bands flicker in with horizontal tearing
+        for (let y = 0; y < H;) {
+          const bh = 2 + Math.floor(Math.random() * 10);
+          if (Math.random() < p * 1.4 + 0.05) {
+            const dx = Math.round((Math.random() - 0.5) * 2 * q * q * W * 0.14);
+            const sy2 = sy + (y / H) * sh, sh2 = (bh / H) * sh;
+            ctx.drawImage(img, sx, sy2, sw, sh2, dx, y, W, bh);
+            // ghost copy trailing the band while the signal is unstable
+            if (Math.random() < q * 0.5) {
+              ctx.globalAlpha = 0.35 * q;
+              ctx.drawImage(img, sx, sy2, sw, sh2, dx + 2 + Math.round(q * 10), y, W, bh);
+              ctx.globalAlpha = 1;
+            }
           }
+          y += bh;
         }
-        if (t < 1) requestAnimationFrame(step); else cv.remove();
+        // blue dropout streaks, thinning out
+        ctx.fillStyle = BLUE;
+        for (let i = Math.round(q * 50); i > 0; i--) {
+          ctx.fillRect(Math.random() * W, Math.random() * H, 3 + Math.random() * 18, 1 + Math.random() * 2);
+        }
+        // scanlines fade with the glitch
+        if (q > 0.05) {
+          ctx.fillStyle = 'rgba(19,12,242,' + (0.18 * q).toFixed(3) + ')';
+          for (let yy = 0; yy < H; yy += 2) ctx.fillRect(0, yy, W, 1);
+        }
+        if (t < 1) requestAnimationFrame(step);
+        else { wrap.classList.add('loaded'); cv.remove(); }
       };
       requestAnimationFrame(step);
     };
