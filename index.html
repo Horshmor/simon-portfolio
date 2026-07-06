@@ -108,6 +108,63 @@
     link.setAttribute('aria-expanded', open);
   });
 
+  // Dither preloader: each image starts as a blue rectangle; once loaded, the blue
+  // erodes into the image with an 8x8 Bayer dither driven by a random gradient.
+  const BLUE = '#130CF2';
+  const BAYER = [
+    [0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26],
+    [12, 44, 4, 36, 14, 46, 6, 38], [60, 28, 52, 20, 62, 30, 54, 22],
+    [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25],
+    [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21],
+  ];
+  const CELL = 10;        // css px per dither cell
+  const DURATION = 600;   // ms
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  document.querySelectorAll('.card-img img').forEach((img) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'reveal';
+    img.replaceWith(wrap);
+    wrap.appendChild(img);
+
+    const cv = document.createElement('canvas');
+    wrap.appendChild(cv);
+    const ctx = cv.getContext('2d');
+    const r = wrap.getBoundingClientRect();
+    const cols = cv.width = Math.max(1, Math.round(r.width / CELL));
+    const rows = cv.height = Math.max(1, Math.round(r.height / CELL));
+    ctx.fillStyle = BLUE;
+    ctx.fillRect(0, 0, cols, rows);
+
+    const reveal = () => {
+      wrap.classList.add('loaded');
+      if (reduceMotion) { cv.remove(); return; }
+      // random gradient direction, normalized so projection spans 0..1
+      const ang = Math.random() * Math.PI * 2;
+      const dx = Math.cos(ang), dy = Math.sin(ang);
+      const corners = [0, dx * (cols - 1), dy * (rows - 1), dx * (cols - 1) + dy * (rows - 1)];
+      const min = Math.min(...corners), span = Math.max(...corners) - min || 1;
+      const t0 = performance.now();
+      const step = (now) => {
+        const t = Math.min(1, (now - t0) / DURATION);
+        const p = t * t * (3 - 2 * t); // smoothstep
+        ctx.clearRect(0, 0, cols, rows);
+        ctx.fillStyle = BLUE;
+        for (let y = 0; y < rows; y++) {
+          for (let x = 0; x < cols; x++) {
+            const g = (x * dx + y * dy - min) / span;
+            if (g * 0.72 + (BAYER[y & 7][x & 7] / 64) * 0.28 > p) ctx.fillRect(x, y, 1, 1);
+          }
+        }
+        if (t < 1) requestAnimationFrame(step); else cv.remove();
+      };
+      requestAnimationFrame(step);
+    };
+
+    if (img.complete && img.naturalWidth) reveal();
+    else img.addEventListener('load', reveal, { once: true });
+  });
+
   // Hover-scrub slideshow: moving left→right across the image steps through slides.
   document.querySelectorAll('.card-img').forEach((box) => {
     const slides = box.querySelector('.slides');
