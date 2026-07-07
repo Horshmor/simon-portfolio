@@ -109,17 +109,30 @@
     link.setAttribute('aria-expanded', open);
   });
 
-  // Dither preloader: each image starts as a blue rectangle; once loaded, the blue
-  // erodes into the image with an 8x8 Bayer dither over a cloudy random noise field.
+  // Dither preloader: each image starts as a blue rectangle; once loaded, the
+  // colour bleeds in through a cloudy Bayer dither (blue -> quantized colour ->
+  // exact pixel) while the pixelation itself sharpens up to full resolution.
   const BLUE = '#130CF2';
+  const BLUE_RGB = [19, 12, 242];
   const BAYER = [
     [0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26],
     [12, 44, 4, 36, 14, 46, 6, 38], [60, 28, 52, 20, 62, 30, 54, 22],
     [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25],
     [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21],
   ];
-  const CELL = 6.7;       // css px per dither cell
-  const DURATION = 600;   // ms
+  // tuned in the dither lab
+  const CELL = 6.7;        // css px per dither cell
+  const DURATION = 600;    // ms
+  const GRAIN = 0.22;      // bayer weight in the threshold field
+  const SCALE_BIG = 24;    // large cloud lattice
+  const SCALE_SMALL = 8;   // small cloud lattice
+  const SMALL_W = 0.24;    // small cloud weight
+  const BLEED = 0.22;      // per-cell colour-bleed length
+  const LEVELS = 8;        // max colour quantization levels
+  const TINT = 0.5;        // how long the blue tint holds per cell
+  const RES = 0.5;         // last fraction of the timeline that sharpens res
+  const RES_ON = true;     // false = dither bleeds over the full-res image
+  const DPR = Math.min(2, window.devicePixelRatio || 1);
 
   // smooth value noise: random lattice sampled with bilinear interpolation
   const makeNoise = (cols, rows, scale) => {
@@ -161,44 +174,122 @@
     const cv = document.createElement('canvas');
     wrap.appendChild(cv);
     const ctx = cv.getContext('2d');
-    const r = wrap.getBoundingClientRect();
-    const cols = cv.width = Math.max(1, Math.round(r.width / CELL));
-    const rows = cv.height = Math.max(1, Math.round(r.height / CELL));
-    const paintBlue = () => { ctx.fillStyle = BLUE; ctx.fillRect(0, 0, cols, rows); };
-    paintBlue();
-    let raf = 0, playing = false;
 
-    const reveal = () => {
-      wrap.classList.add('loaded');
-      if (reduceMotion) { ctx.clearRect(0, 0, cols, rows); return; }
-      playing = true;
-      // cloudy threshold field: two octaves of smooth noise + bayer grain,
-      // normalized to 0..1 so the reveal always spans the full duration
-      const n1 = makeNoise(cols, rows, 9), n2 = makeNoise(cols, rows, 3.5);
-      const field = new Float32Array(cols * rows);
+    let cssW = 0, cssH = 0, cols = 0, rows = 0;
+    let crop = null, pix = null, tmp = null, tctx = null, out = null, tmp2 = null;
+    let field = null, ready = false, raf = 0, playing = false;
+
+    const sizeCanvas = () => {
+      const r = wrap.getBoundingClientRect();
+      cssW = r.width; cssH = r.height;
+      cv.width = Math.max(2, Math.round(cssW * DPR));
+      cv.height = Math.max(2, Math.round(cssH * DPR));
+      cols = Math.max(2, Math.round(cssW / CELL));
+      rows = Math.max(2, Math.round(cssH / CELL));
+    };
+    const paintBlue = () => { ctx.fillStyle = BLUE; ctx.fillRect(0, 0, cv.width, cv.height); };
+    sizeCanvas();
+    paintBlue();
+
+    // downsample image to the cell grid (cover-crop to the card aspect)
+    const prepare = () => {
+      sizeCanvas();
+      const ia = img.naturalWidth / img.naturalHeight, ca = cols / rows;
+      let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
+      if (ia > ca) { sw = sh * ca; sx = (img.naturalWidth - sw) / 2; }
+      else { sh = sw / ca; sy = (img.naturalHeight - sh) / 2; }
+      crop = [sx, sy, sw, sh];
+      tmp = document.createElement('canvas'); tmp.width = cols; tmp.height = rows;
+      tctx = tmp.getContext('2d');
+      tctx.drawImage(img, sx, sy, sw, sh, 0, 0, cols, rows);
+      pix = tctx.getImageData(0, 0, cols, rows).data;
+      out = tctx.createImageData(cols, rows);
+      tmp2 = document.createElement('canvas');
+      ready = true;
+    };
+
+    // fresh cloudy threshold field, normalized 0..1 so the reveal fills DURATION
+    const buildField = () => {
+      const n1 = makeNoise(cols, rows, SCALE_BIG), n2 = makeNoise(cols, rows, SCALE_SMALL);
+      const bigW = Math.max(0, 1 - SMALL_W - GRAIN);
+      field = new Float32Array(cols * rows);
       let lo = Infinity, hi = -Infinity;
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
-          const v = n1(x, y) * 0.62 + n2(x, y) * 0.20 + (BAYER[y & 7][x & 7] / 64) * 0.18;
+          const v = n1(x, y) * bigW + n2(x, y) * SMALL_W + (BAYER[y & 7][x & 7] / 64) * GRAIN;
           field[y * cols + x] = v;
-          if (v < lo) lo = v;
-          if (v > hi) hi = v;
+          if (v < lo) lo = v; if (v > hi) hi = v;
         }
       }
       const span = hi - lo || 1;
+      for (let i = 0; i < field.length; i++) field[i] = (field[i] - lo) / span;
+    };
+
+    const renderFrame = (t) => {
+      const pe = t * t * (3 - 2 * t); // smoothstep
+      const [csx, csy, csw, csh] = crop;
+
+      // base layer: the image, pixelated at the current cell size; when RES_ON
+      // it sharpens from cell size down to full res over the last RES fraction,
+      // running concurrently with the dither overlay
+      let cellNow = 1;
+      if (RES_ON) {
+        const k = Math.min(1, Math.max(0, (t - (1 - RES)) / RES));
+        cellNow = Math.pow(CELL, 1 - k);
+      }
+      if (cellNow <= 1.02) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(img, csx, csy, csw, csh, 0, 0, cv.width, cv.height);
+      } else {
+        const c2 = Math.max(2, Math.round(cssW / cellNow));
+        const r2 = Math.max(2, Math.round(cssH / cellNow));
+        if (tmp2.width !== c2 || tmp2.height !== r2) { tmp2.width = c2; tmp2.height = r2; }
+        tmp2.getContext('2d').drawImage(img, csx, csy, csw, csh, 0, 0, c2, r2);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tmp2, 0, 0, cv.width, cv.height);
+      }
+
+      // dither overlay: cells cross their threshold then refine from a
+      // blue-tinted, heavily-quantized colour to transparent (base shows through)
+      const d = out.data;
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const i = y * cols + x, o = i * 4;
+          let r = BLUE_RGB[0], g = BLUE_RGB[1], b = BLUE_RGB[2], a = 255;
+          const local = (pe - field[i] * (1 - BLEED)) / BLEED;
+          if (local > 0) {
+            const m = Math.min(1, local);
+            if (m >= 1) a = 0;
+            else {
+              const bay = BAYER[y & 7][x & 7] / 64;
+              const levels = 2 + Math.round(m * (LEVELS - 2));
+              const q = (c) => Math.floor(Math.min(levels - 1, Math.max(0, c / 255 * (levels - 1) + bay))) / (levels - 1) * 255;
+              const mix = Math.min(1, m / Math.max(0.001, TINT));
+              r = BLUE_RGB[0] + (q(pix[o]) - BLUE_RGB[0]) * mix;
+              g = BLUE_RGB[1] + (q(pix[o + 1]) - BLUE_RGB[1]) * mix;
+              b = BLUE_RGB[2] + (q(pix[o + 2]) - BLUE_RGB[2]) * mix;
+            }
+          }
+          d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = a;
+        }
+      }
+      tctx.putImageData(out, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(tmp, 0, 0, cv.width, cv.height);
+    };
+
+    const reveal = () => {
+      wrap.classList.add('loaded');
+      if (reduceMotion) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
+      if (!ready) prepare();
+      buildField();
+      playing = true;
       const t0 = performance.now();
       const step = (now) => {
         const t = Math.min(1, (now - t0) / DURATION);
-        const p = t * t * (3 - 2 * t); // smoothstep
-        ctx.clearRect(0, 0, cols, rows);
-        ctx.fillStyle = BLUE;
-        for (let y = 0; y < rows; y++) {
-          for (let x = 0; x < cols; x++) {
-            if ((field[y * cols + x] - lo) / span > p) ctx.fillRect(x, y, 1, 1);
-          }
-        }
+        renderFrame(t);
         if (t < 1) raf = requestAnimationFrame(step);
-        else { ctx.clearRect(0, 0, cols, rows); playing = false; }
+        else { ctx.clearRect(0, 0, cv.width, cv.height); playing = false; } // hand off to the real <img>
       };
       raf = requestAnimationFrame(step);
     };
