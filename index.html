@@ -121,8 +121,8 @@
     [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21],
   ];
   // tuned in the dither lab
-  const CELL = 6.7;        // css px per dither cell
-  const DURATION = 600;    // ms
+  const CELL = 7;          // css px per dither cell
+  const DURATION = 500;    // ms
   const GRAIN = 0.22;      // bayer weight in the threshold field
   const SCALE_BIG = 24;    // large cloud lattice
   const SCALE_SMALL = 8;   // small cloud lattice
@@ -131,7 +131,7 @@
   const LEVELS = 8;        // max colour quantization levels
   const TINT = 0.5;        // how long the blue tint holds per cell
   const RES = 0.5;         // last fraction of the timeline that sharpens res
-  const RES_ON = true;     // false = dither bleeds over the full-res image
+  const RES_ON = false;    // false = dither bleeds over the full-res image
   const DPR = Math.min(2, window.devicePixelRatio || 1);
 
   // smooth value noise: random lattice sampled with bilinear interpolation
