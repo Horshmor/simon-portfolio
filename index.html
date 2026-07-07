@@ -195,7 +195,9 @@
     // downsample image to the cell grid (cover-crop to the card aspect)
     const prepare = () => {
       sizeCanvas();
-      const ia = img.naturalWidth / img.naturalHeight, ca = cols / rows;
+      // crop to the real box aspect (matches the <img> object-fit: cover), not
+      // the rounded cell grid — otherwise the handoff to the <img> shifts ~1px
+      const ia = img.naturalWidth / img.naturalHeight, ca = cssW / cssH;
       let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
       if (ia > ca) { sw = sh * ca; sx = (img.naturalWidth - sw) / 2; }
       else { sh = sw / ca; sy = (img.naturalHeight - sh) / 2; }
